@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>家族の音声メモ</title>
+  <!-- アプリ化（PWA）のための設定 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="家族の音声メモ">
   <!-- デザイン用 (Tailwind CSS) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase（データベース用） -->
@@ -17,7 +22,7 @@
     <p class="text-xs text-amber-700 mt-1">声で残して、みんなで共有しよう</p>
   </header>
 
-  <!-- 検索窓（追加） -->
+  <!-- 検索窓 -->
   <div class="mb-3">
     <input type="text" id="searchInput" placeholder="🔍 メモを検索..." oninput="fetchNotes()" class="w-full text-xs p-2 bg-white border border-amber-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400">
   </div>
@@ -82,7 +87,6 @@
       }
     };
 
-    // メモ一覧の取得 ＆ 検索・完了フィルタリング
     async function fetchNotes() {
       if (!supabaseClient) return;
       const { data, error } = await supabaseClient.from('notes').select('*').order('created_at', { ascending: false });
@@ -100,7 +104,6 @@
         return;
       }
 
-      // 検索キーワードで絞り込み
       const filteredData = data.filter(note => {
         const content = note.content ? note.content.toLowerCase() : '';
         const userName = note.user_name ? note.user_name.toLowerCase() : '';
@@ -114,14 +117,12 @@
 
       listEl.innerHTML = filteredData.map(note => {
         const isCompleted = note.is_completed;
-        // 完了している場合は文字を薄く・取り消し線をつける
         const contentStyle = isCompleted ? 'line-through text-gray-400' : 'text-gray-800';
         const bgStyle = isCompleted ? 'bg-gray-50 border-gray-200' : 'bg-white border-amber-100';
 
         return `
           <div class="${bgStyle} p-4 rounded-xl shadow-sm border flex items-start justify-between gap-3 transition-all">
             <div class="flex items-start gap-3 flex-1">
-              <!-- 完了チェックボックス -->
               <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleComplete('${note.id}', ${!isCompleted})" class="mt-1.5 w-4 h-4 accent-amber-500 cursor-pointer shrink-0">
               <div class="flex-1">
                 <p class="${contentStyle} text-base leading-relaxed break-all">${escapeHtml(note.content)}</p>
@@ -138,7 +139,6 @@
       }).join('');
     }
 
-    // 完了状態の切り替え
     async function toggleComplete(id, currentStatus) {
       if (supabaseClient) {
         await supabaseClient.from('notes').update({ is_completed: currentStatus }).eq('id', id);
@@ -146,7 +146,6 @@
       }
     }
 
-    // 音声入力処理
     function toggleListening() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
@@ -192,7 +191,6 @@
       } catch (err) {}
     }
 
-    // メモ保存
     async function saveNote() {
       const input = document.getElementById('memoInput');
       const nameInput = document.getElementById('userName');
@@ -207,7 +205,7 @@
         const { error } = await supabaseClient.from('notes').insert([{ content, user_name: userName, is_completed: false }]);
         if (!error) {
           input.value = '';
-          document.getElementById('searchInput').value = ''; // 投稿時に検索をリセット
+          document.getElementById('searchInput').value = '';
           fetchNotes();
         } else {
           alert('保存に失敗しました: ' + error.message);
@@ -215,7 +213,6 @@
       }
     }
 
-    // メモ削除
     async function deleteNote(id) {
       if (supabaseClient) {
         await supabaseClient.from('notes').delete().eq('id', id);
