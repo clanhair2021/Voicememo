@@ -2,22 +2,26 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>家族の音声メモ</title>
-    <!-- manifest.json の読み込み（アプリ化に必須） -->
-  <link rel="manifest" href="manifest.json">
 
-  <!-- アプリ化（PWA）のための設定 -->
-  <meta name="mobile-web-app-capable" content="yes">
+  <!-- PWA・全画面表示のための超重要設定 -->
+  <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="家族の音声メモ">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="音声メモ">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f59e0b">
+
+  <!-- iPhone用ホーム画面アイコン（これがないと全画面化を拒否されます） -->
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/25/25682.png">
+
   <!-- デザイン用 (Tailwind CSS) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase（データベース用） -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-amber-50/50 p-4 pb-40 max-w-md mx-auto min-h-screen text-gray-800">
+<body class="bg-amber-50/50 p-4 pb-40 max-w-md mx-auto min-h-screen text-gray-800 pt-8">
 
   <!-- ヘッダー -->
   <header class="mb-4 text-center">
@@ -42,7 +46,7 @@
   </div>
 
   <!-- 固定フッター（音声入力＆投稿） -->
-  <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-amber-100">
+  <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-amber-100 pb-8">
     <div class="max-w-md mx-auto space-y-2">
       <div class="flex gap-2">
         <textarea id="memoInput" placeholder="🎤 マイクを押して話してみてね..." class="flex-1 text-sm p-2.5 border border-gray-200 rounded-xl resize-none h-12 focus:outline-none focus:ring-2 focus:ring-amber-400"></textarea>
@@ -229,3 +233,4 @@
   </script>
 </body>
 </html>
+
