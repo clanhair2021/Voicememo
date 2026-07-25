@@ -44,12 +44,8 @@
   </div>
 
   <script>
-    // =========================================================
-    // ★ ここにSupabaseでコピーしたURLとKeyを貼り付けてください ★
-    // =========================================================
-    const SUPABASE_URL = 'https://dpvsqapxwiemqnroxddc.supabase.co'; // 先ほどの Project URL
-    const SUPABASE_KEY = 'sb_publishable_Rtje4WV6j9zedHnWR3jhyQ_y5su2bee';            // 先ほどの anon public Key
-    // =========================================================
+    const SUPABASE_URL = 'https://dpvsqapxwiemqnroxddc.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_Rtje4WV6j9zedHnWR3jhyQ_y5su2bee';
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     let recognition = null;
@@ -63,7 +59,7 @@
       // データの初回読み込み
       fetchNotes();
 
-      // リアルタイム同期（誰かが追加/削除したら自動で画面更新）
+      // リアルタイム同期
       supabase.channel('public:notes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchNotes)
         .subscribe();
@@ -100,23 +96,27 @@
       `).join('');
     }
 
-    // 音声入力（Web Speech API）の切り替え
+    // 音声入力の切り替え処理（強化版）
     function toggleListening() {
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert('お使いのブラウザは音声入力に対応していません。ChromeまたはSafariでお試しください。');
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        alert('お使いのブラウザは音声入力に対応していません。iPhoneの方はSafari、Androidの方はChromeでお試しください。');
         return;
       }
 
       const micBtn = document.getElementById('micBtn');
 
-      if (isListening) {
+      // 既に録音中の場合は停止
+      if (isListening && recognition) {
         recognition.stop();
         return;
       }
 
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      // 毎回新しい認識インスタンスを生成して安定化
       recognition = new SpeechRecognition();
       recognition.lang = 'ja-JP';
+      recognition.interimResults = false;
 
       recognition.onstart = () => {
         isListening = true;
@@ -130,13 +130,28 @@
         micBtn.innerText = '🎤 マイク';
       };
 
+      recognition.onerror = (event) => {
+        console.error('音声認識エラー:', event.error);
+        isListening = false;
+        micBtn.className = 'px-4 rounded-xl font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all flex items-center justify-center shrink-0';
+        micBtn.innerText = '🎤 マイク';
+        
+        if (event.error === 'not-allowed') {
+          alert('マイクの利用が許可されていません。ブラウザの設定でマイクのアクセスを許可してください。');
+        }
+      };
+
       recognition.onresult = (e) => {
         const input = document.getElementById('memoInput');
         const text = e.results[0][0].transcript;
         input.value = input.value ? input.value + ' ' + text : text;
       };
 
-      recognition.start();
+      try {
+        recognition.start();
+      } catch (err) {
+        console.error('起動エラー:', err);
+      }
     }
 
     // メモをデータベースに保存
@@ -169,4 +184,3 @@
   </script>
 </body>
 </html>
-
