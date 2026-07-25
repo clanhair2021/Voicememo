@@ -3,18 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族の音声メモ</title>
-  <!-- デザイン用 (Tailwind CSS) -->
+  <title>家族の音声メモ（デモ版・安定化）</title>
+  <!-- デザインを整えるTailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Supabase JS CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-amber-50/50 p-4 pb-36 max-w-md mx-auto min-h-screen text-gray-800">
 
   <!-- ヘッダー -->
   <header class="mb-6 text-center">
     <h1 class="text-2xl font-bold text-amber-900">🗣️ 家族の音声メモ</h1>
-    <p class="text-xs text-amber-700 mt-1">声で残して、みんなで共有しよう</p>
+    <p class="text-xs text-amber-700 mt-1">【動作確認版】声で入力してテストしてみよう！</p>
   </header>
 
   <!-- 名前入力 -->
@@ -25,7 +23,18 @@
 
   <!-- メモ一覧表示エリア -->
   <div id="notesList" class="space-y-3">
-    <p class="text-center text-amber-700/60 py-8">読み込み中...</p>
+    <!-- 初期ダミーデータ -->
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-start">
+      <div>
+        <p class="text-gray-800 text-base leading-relaxed">牛乳と卵を買ってくる！</p>
+        <div class="mt-2 flex items-center space-x-2 text-xs text-amber-700/70">
+          <span class="font-semibold text-amber-900">おかあさん</span>
+          <span>•</span>
+          <span>10:30</span>
+        </div>
+      </div>
+      <button onclick="this.parentElement.remove()" class="text-gray-300 hover:text-red-500 text-sm p-1">✕</button>
+    </div>
   </div>
 
   <!-- 固定フッター（音声入力＆投稿） -->
@@ -33,91 +42,32 @@
     <div class="max-w-md mx-auto space-y-2">
       <div class="flex gap-2">
         <textarea id="memoInput" placeholder="🎤 マイクを押して話してみてね..." class="flex-1 text-sm p-2.5 border border-gray-200 rounded-xl resize-none h-12 focus:outline-none focus:ring-2 focus:ring-amber-400"></textarea>
-        <button id="micBtn" class="px-4 rounded-xl font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all flex items-center justify-center shrink-0">
+        <button id="micBtn" onclick="toggleListening()" class="px-4 rounded-xl font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all flex items-center justify-center shrink-0">
           🎤 マイク
         </button>
       </div>
-      <button id="saveBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl transition-colors shadow-sm">
+      <button onclick="addMemo()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl transition-colors shadow-sm">
         メモを追加する
       </button>
     </div>
   </div>
 
   <script>
-    // --- 1. Supabaseの初期化 ---
-    const SUPABASE_URL = 'https://dpvsqapxwiemqnroxddc.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_Rtje4WV6j9zedHnWR3jhyQ_y5su2bee';
-
-    let supabase = null;
-    try {
-      if (window.supabase) {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      }
-    } catch (e) {
-      console.error('Supabase初期化エラー:', e);
-    }
-
-    // --- 2. 画面読み込み時の処理 ---
-    window.addEventListener('DOMContentLoaded', () => {
-      const savedName = localStorage.getItem('family_user_name');
-      if (savedName) document.getElementById('userName').value = savedName;
-
-      // ボタンのクリックイベントをJavaScript側でしっかり接続
-      document.getElementById('micBtn').addEventListener('click', toggleListening);
-      document.getElementById('saveBtn').addEventListener('click', saveNote);
-
-      // 初回データ読み込みとリアルタイム同期
-      if (supabase) {
-        fetchNotes();
-        supabase.channel('public:notes')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchNotes)
-          .subscribe();
-      } else {
-        document.getElementById('notesList').innerHTML = '<p class="text-center text-amber-700/60 py-8">※データベース接続準備中</p>';
-      }
-    });
-
-    // --- 3. メモ一覧取得 ---
-    async function fetchNotes() {
-      if (!supabase) return;
-      const { data, error } = await supabase.from('notes').select('*').order('created_at', { ascending: false });
-      const listEl = document.getElementById('notesList');
-      
-      if (error) {
-        console.error('取得エラー:', error);
-        listEl.innerHTML = '<p class="text-center text-red-500 py-8">データの読み込みに失敗しました</p>';
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        listEl.innerHTML = '<p class="text-center text-amber-700/60 py-8">まだメモはありません</p>';
-        return;
-      }
-
-      listEl.innerHTML = data.map(note => `
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-start">
-          <div>
-            <p class="text-gray-800 text-base leading-relaxed">${escapeHtml(note.content)}</p>
-            <div class="mt-2 flex items-center space-x-2 text-xs text-amber-700/70">
-              <span class="font-semibold text-amber-900">${escapeHtml(note.user_name)}</span>
-              <span>•</span>
-              <span>${new Date(note.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          </div>
-          <button onclick="deleteNote('${note.id}')" class="text-gray-300 hover:text-red-500 text-sm p-1">✕</button>
-        </div>
-      `).join('');
-    }
-
-    // --- 4. 音声入力処理 ---
     let recognition = null;
     let isListening = false;
 
+    // 名前をブラウザに一時記憶
+    window.onload = () => {
+      const savedName = localStorage.getItem('demo_user_name');
+      if (savedName) document.getElementById('userName').value = savedName;
+    };
+
+    // 音声入力（Web Speech API）の切り替え
     function toggleListening() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        alert('お使いのブラウザは音声入力に対応していません。iPhoneの方はSafari、Androidの方はChromeでお試しください。');
+        alert('お使いのブラウザは音声入力に対応していません。');
         return;
       }
 
@@ -147,7 +97,7 @@
         isListening = false;
         micBtn.className = 'px-4 rounded-xl font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all flex items-center justify-center shrink-0';
         micBtn.innerText = '🎤 マイク';
-        alert('マイク起動エラー: ' + event.error);
+        console.error('音声認識エラー:', event.error);
       };
 
       recognition.onresult = (e) => {
@@ -159,35 +109,40 @@
       try {
         recognition.start();
       } catch (err) {
-        alert('起動失敗: ' + err.message);
+        console.error('起動失敗:', err);
       }
     }
 
-    // --- 5. 保存＆削除処理 ---
-    async function saveNote() {
+    // 画面にメモを追加する処理
+    function addMemo() {
       const input = document.getElementById('memoInput');
       const nameInput = document.getElementById('userName');
       const content = input.value.trim();
-      const userName = nameInput.value.trim() || '家族の誰か';
+      const userName = nameInput.value.trim() || '名無しさん';
 
       if (!content) return;
 
-      localStorage.setItem('family_user_name', userName);
+      localStorage.setItem('demo_user_name', userName);
 
-      if (supabase) {
-        const { error } = await supabase.from('notes').insert([{ content, user_name: userName }]);
-        if (!error) {
-          input.value = '';
-        } else {
-          alert('保存エラー: ' + error.message);
-        }
-      }
-    }
+      const listEl = document.getElementById('notesList');
+      const timeStr = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 
-    async function deleteNote(id) {
-      if (supabase) {
-        await supabase.from('notes').delete().eq('id', id);
-      }
+      const newMemoHtml = `
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-start animate-fade-in">
+          <div>
+            <p class="text-gray-800 text-base leading-relaxed">${escapeHtml(content)}</p>
+            <div class="mt-2 flex items-center space-x-2 text-xs text-amber-700/70">
+              <span class="font-semibold text-amber-900">${escapeHtml(userName)}</span>
+              <span>•</span>
+              <span>${timeStr}</span>
+            </div>
+          </div>
+          <button onclick="this.parentElement.remove()" class="text-gray-300 hover:text-red-500 text-sm p-1">✕</button>
+        </div>
+      `;
+
+      listEl.insertAdjacentHTML('afterbegin', newMemoHtml);
+      input.value = '';
     }
 
     function escapeHtml(str) {
