@@ -1,0 +1,9 @@
+{
+  "name": "家族の音声メモ",
+  "short_name": "音声メモ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fffbeb",
+  "theme_color": "#f59e0b",
+  "icons": []
+}
