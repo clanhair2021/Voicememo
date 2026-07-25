@@ -3,16 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族の音声メモ（デモ版・安定化）</title>
-  <!-- デザインを整えるTailwind CSS -->
+  <title>家族の音声メモ</title>
+  <!-- デザイン用 (Tailwind CSS) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase（データベース用） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-amber-50/50 p-4 pb-36 max-w-md mx-auto min-h-screen text-gray-800">
 
   <!-- ヘッダー -->
   <header class="mb-6 text-center">
     <h1 class="text-2xl font-bold text-amber-900">🗣️ 家族の音声メモ</h1>
-    <p class="text-xs text-amber-700 mt-1">【動作確認版】声で入力してテストしてみよう！</p>
+    <p class="text-xs text-amber-700 mt-1">声で残して、みんなで共有しよう</p>
   </header>
 
   <!-- 名前入力 -->
@@ -23,18 +25,7 @@
 
   <!-- メモ一覧表示エリア -->
   <div id="notesList" class="space-y-3">
-    <!-- 初期ダミーデータ -->
-    <div class="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-start">
-      <div>
-        <p class="text-gray-800 text-base leading-relaxed">牛乳と卵を買ってくる！</p>
-        <div class="mt-2 flex items-center space-x-2 text-xs text-amber-700/70">
-          <span class="font-semibold text-amber-900">おかあさん</span>
-          <span>•</span>
-          <span>10:30</span>
-        </div>
-      </div>
-      <button onclick="this.parentElement.remove()" class="text-gray-300 hover:text-red-500 text-sm p-1">✕</button>
-    </div>
+    <p class="text-center text-amber-700/60 py-8">読み込み中...</p>
   </div>
 
   <!-- 固定フッター（音声入力＆投稿） -->
@@ -46,23 +37,85 @@
           🎤 マイク
         </button>
       </div>
-      <button onclick="addMemo()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl transition-colors shadow-sm">
+      <button onclick="saveNote()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl transition-colors shadow-sm">
         メモを追加する
       </button>
     </div>
   </div>
 
   <script>
+    // =========================================================
+    // ★ Supabaseの接続情報 ★
+    // =========================================================
+    const SUPABASE_URL = 'https://dpvsqapxwiemqnroxddc.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_Rtje4WV6j9zedHnWR3jhyQ_y5su2bee';
+    // =========================================================
+
+    let supabaseClient = null;
+    try {
+      if (window.supabase) {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      }
+    } catch (e) {
+      console.error('Supabase初期化失敗:', e);
+    }
+
     let recognition = null;
     let isListening = false;
 
-    // 名前をブラウザに一時記憶
+    // 画面が開いた時の初期処理
     window.onload = () => {
-      const savedName = localStorage.getItem('demo_user_name');
+      const savedName = localStorage.getItem('family_user_name');
       if (savedName) document.getElementById('userName').value = savedName;
+      
+      // データの初回読み込み＆リアルタイム同期
+      if (supabaseClient) {
+        fetchNotes();
+        try {
+          supabaseClient.channel('public:notes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchNotes)
+            .subscribe();
+        } catch (err) {
+          console.error('リアルタイム設定エラー:', err);
+        }
+      } else {
+        document.getElementById('notesList').innerHTML = '<p class="text-center text-amber-700/60 py-8">まだメモはありません</p>';
+      }
     };
 
-    // 音声入力（Web Speech API）の切り替え
+    // データベースからメモ一覧を取得して表示
+    async function fetchNotes() {
+      if (!supabaseClient) return;
+      const { data, error } = await supabaseClient.from('notes').select('*').order('created_at', { ascending: false });
+      const listEl = document.getElementById('notesList');
+      
+      if (error) {
+        console.error('取得エラー:', error);
+        listEl.innerHTML = '<p class="text-center text-red-500 py-8">データの読み込みに失敗しました</p>';
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        listEl.innerHTML = '<p class="text-center text-amber-700/60 py-8">まだメモはありません</p>';
+        return;
+      }
+
+      listEl.innerHTML = data.map(note => `
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-start">
+          <div>
+            <p class="text-gray-800 text-base leading-relaxed">${escapeHtml(note.content)}</p>
+            <div class="mt-2 flex items-center space-x-2 text-xs text-amber-700/70">
+              <span class="font-semibold text-amber-900">${escapeHtml(note.user_name)}</span>
+              <span>•</span>
+              <span>${new Date(note.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          </div>
+          <button onclick="deleteNote('${note.id}')" class="text-gray-300 hover:text-red-500 text-sm p-1">✕</button>
+        </div>
+      `).join('');
+    }
+
+    // 音声入力（Web Speech API）の切り替え（マイク最優先・独立型）
     function toggleListening() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -113,36 +166,36 @@
       }
     }
 
-    // 画面にメモを追加する処理
-    function addMemo() {
+    // メモをデータベースに保存
+    async function saveNote() {
       const input = document.getElementById('memoInput');
       const nameInput = document.getElementById('userName');
       const content = input.value.trim();
-      const userName = nameInput.value.trim() || '名無しさん';
+      const userName = nameInput.value.trim() || '家族の誰か';
 
       if (!content) return;
 
-      localStorage.setItem('demo_user_name', userName);
+      localStorage.setItem('family_user_name', userName);
 
-      const listEl = document.getElementById('notesList');
-      const timeStr = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+      if (supabaseClient) {
+        const { error } = await supabaseClient.from('notes').insert([{ content, user_name: userName }]);
+        if (!error) {
+          input.value = '';
+          fetchNotes(); // 即座に画面を更新
+        } else {
+          alert('保存に失敗しました: ' + error.message);
+        }
+      } else {
+        alert('データベースに接続されていません');
+      }
+    }
 
-      const newMemoHtml = `
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-start animate-fade-in">
-          <div>
-            <p class="text-gray-800 text-base leading-relaxed">${escapeHtml(content)}</p>
-            <div class="mt-2 flex items-center space-x-2 text-xs text-amber-700/70">
-              <span class="font-semibold text-amber-900">${escapeHtml(userName)}</span>
-              <span>•</span>
-              <span>${timeStr}</span>
-            </div>
-          </div>
-          <button onclick="this.parentElement.remove()" class="text-gray-300 hover:text-red-500 text-sm p-1">✕</button>
-        </div>
-      `;
-
-      listEl.insertAdjacentHTML('afterbegin', newMemoHtml);
-      input.value = '';
+    // メモの削除
+    async function deleteNote(id) {
+      if (supabaseClient) {
+        await supabaseClient.from('notes').delete().eq('id', id);
+        fetchNotes();
+      }
     }
 
     function escapeHtml(str) {
