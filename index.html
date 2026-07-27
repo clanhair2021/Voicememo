@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族の音声メモ（自動分類版）</title>
+  <title>家族の音声メモ（リアルタイム共有版）</title>
   <link rel="manifest" href="manifest.json">
+  <!-- Supabase JS ライブラリの読み込み -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     /* 全体のレイアウト設定 */
     body { 
@@ -260,7 +262,7 @@
   </div>
 
   <div id="notesList"></div>
-  <div id="status">読み込み中...</div>
+  <div id="status">同期中...</div>
 
   <!-- 画面下に固定する入力バー -->
   <div class="input-container">
@@ -272,8 +274,41 @@
   </div>
 
   <script>
-    const STORAGE_KEY = 'family_notes_local';
+    // Supabaseの初期化設定
+    const SUPABASE_URL = 'https://cnzvsrulnssplkrgmdcd.supabase.co';
+    const SUPABASE_ANON_KEY = 'EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNuenZzcnVsbnNzcGxrcmdtZGNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNTEyMzgsImV4cCI6MjEwMDcyNzIzOH0.swn4kkDlmGlQhMlmc_zo0ibhRoQNj8LpY7Dh21P_T5U';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     let currentTab = 'all';
+    let allNotes = []; // メモリ上の全メモデータ
+    let editingNoteId = null; // 編集中のメモID
+
+    // 初期化とリアルタイム監視の開始
+    async function init() {
+      await fetchNotes();
+      subscribeToRealtime();
+    }
+
+    // Supabaseからのデータ読み込み
+    async function fetchNotes() {
+      const { data, error } = await db.from('notes').select('*').order('id', { ascending: false });
+      if (error) {
+        console.error('取得エラー:', error);
+        document.getElementById('status').innerText = 'データの取得に失敗しました';
+        return;
+      }
+      allNotes = data || [];
+      renderNotes();
+    }
+
+    // Supabaseのリアルタイム変更を検知（他端末で変化があったときに自動更新）
+    function subscribeToRealtime() {
+      db.channel('public:notes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
+          fetchNotes();
+        })
+        .subscribe();
+    }
 
     function selectTab(category) {
       currentTab = category;
@@ -287,16 +322,17 @@
         }
       });
 
-      fetchNotes();
+      renderNotes();
     }
 
-    function fetchNotes() {
+    // 画面への描画処理
+    function renderNotes() {
       const statusEl = document.getElementById('status');
       const listEl = document.getElementById('notesList');
       const searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
       listEl.innerHTML = '';
 
-      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      let notes = [...allNotes];
 
       if (searchQuery) {
         notes = notes.filter(note => note.content.toLowerCase().includes(searchQuery));
@@ -340,12 +376,12 @@
       container.appendChild(title);
 
       notesArray.forEach(note => {
+        const isEditing = (editingNoteId === note.id);
         const div = document.createElement('div');
         div.className = `card ${note.pinned ? 'pinned' : ''} ${note.completed ? 'completed' : ''}`;
         
-        // 編集モードかどうかで表示を切り替え
         let contentHtml = '';
-        if (note.isEditing) {
+        if (isEditing) {
           contentHtml = `<input type="text" class="card-edit-input" id="edit-input-${note.id}" value="${escapeHtml(note.content)}">`;
         } else {
           contentHtml = `<span class="card-text">${escapeHtml(note.content)}</span>`;
@@ -353,18 +389,18 @@
 
         div.innerHTML = `
           <div class="card-content-area">
-            <input type="checkbox" class="card-checkbox" ${note.completed ? 'checked' : ''} onclick="toggleComplete(${note.id})">
+            <input type="checkbox" class="card-checkbox" ${note.completed ? 'checked' : ''} onclick="toggleComplete(${note.id}, ${!note.completed})">
             <div class="card-body">
               ${contentHtml}
               <span class="card-date">${note.created_at || ''}</span>
             </div>
           </div>
           <div class="card-actions">
-            ${note.isEditing ? 
+            ${isEditing ? 
               `<button class="btn-action" onclick="saveEdit(${note.id})">保存</button>` :
               `<button class="btn-action" onclick="startEdit(${note.id})">✏️</button>`
             }
-            <button class="btn-action ${note.pinned ? 'active' : ''}" onclick="togglePin(${note.id})">📌</button>
+            <button class="btn-action ${note.pinned ? 'active' : ''}" onclick="togglePin(${note.id}, ${!note.pinned})">📌</button>
             <button class="btn-del" onclick="deleteNote(${note.id})">削除</button>
           </div>
         `;
@@ -372,7 +408,8 @@
       });
     }
 
-    function addNote() {
+    // メモ追加
+    async function addNote() {
       const input = document.getElementById('noteInput');
       const text = input.value.trim();
       if (!text) return;
@@ -388,9 +425,6 @@
         category = '📋 タスク';
       }
 
-      const notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      
-      // 日付のフォーマット（例: 7/27 21:05）
       const now = new Date();
       const dateStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -400,42 +434,41 @@
         category: category,
         pinned: false,
         completed: false,
-        isEditing: false,
         created_at: dateStr
       };
 
-      const updatedNotes = [newNote, ...notes];
-
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedNotes));
       input.value = '';
-      selectTab(category);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      const { error } = await db.from('notes').insert([newNote]);
+      if (error) {
+        console.error('追加エラー:', error);
+        alert('メモの保存に失敗しました');
+      } else {
+        selectTab(category);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
 
-    function toggleComplete(id) {
-      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      notes = notes.map(note => {
-        if (note.id === id) {
-          return { ...note, completed: !note.completed };
-        }
-        return note;
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      fetchNotes();
+    // 完了チェック切り替え
+    async function toggleComplete(id, completed) {
+      await db.from('notes').update({ completed: completed }).eq('id', id);
     }
 
+    // ピン留め切り替え
+    async function togglePin(id, pinned) {
+      await db.from('notes').update({ pinned: pinned }).eq('id', id);
+    }
+
+    // メモ削除
+    async function deleteNote(id) {
+      await db.from('notes').delete().eq('id', id);
+    }
+
+    // 編集モード開始
     function startEdit(id) {
-      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      notes = notes.map(note => {
-        if (note.id === id) {
-          return { ...note, isEditing: true };
-        }
-        return note;
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      fetchNotes();
+      editingNoteId = id;
+      renderNotes();
       
-      // フォーカスをあてる
       setTimeout(() => {
         const input = document.getElementById(`edit-input-${id}`);
         if (input) {
@@ -448,54 +481,29 @@
       }, 50);
     }
 
-    function saveEdit(id) {
+    // 編集保存
+    async function saveEdit(id) {
       const input = document.getElementById(`edit-input-${id}`);
       if (!input) return;
       const newText = input.value.trim();
       if (!newText) return;
 
-      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      notes = notes.map(note => {
-        if (note.id === id) {
-          // テキストが変わったら必要に応じてカテゴリも再判定
-          let category = note.category;
-          if (newText.includes('予約') || newText.includes('事前予約') || newText.includes('お店') || newText.includes('店')) {
-            category = '📅 予約';
-          } else if (newText.includes('買い物') || newText.includes('買いたい') || newText.includes('買って')) {
-            category = '🛒 買い物';
-          } else if (newText.includes('予定') || newText.includes('明日') || newText.includes('来週') || newText.includes('日') || newText.includes('病院') || newText.includes('子供')) {
-            category = '📅 予定';
-          } else if (newText.includes('タスク') || newText.includes('やること') || newText.includes('掃除')) {
-            category = '📋 タスク';
-          }
+      let category = '📝 その他';
+      if (newText.includes('予約') || newText.includes('事前予約') || newText.includes('お店') || newText.includes('店')) {
+        category = '📅 予約';
+      } else if (newText.includes('買い物') || newText.includes('買いたい') || newText.includes('買って')) {
+        category = '🛒 買い物';
+      } else if (newText.includes('予定') || newText.includes('明日') || newText.includes('来週') || newText.includes('日') || newText.includes('病院') || newText.includes('子供')) {
+        category = '📅 予定';
+      } else if (newText.includes('タスク') || newText.includes('やること') || newText.includes('掃除')) {
+        category = '📋 タスク';
+      }
 
-          return { ...note, content: newText, category: category, isEditing: false };
-        }
-        return note;
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      fetchNotes();
+      editingNoteId = null;
+      await db.from('notes').update({ content: newText, category: category }).eq('id', id);
     }
 
-    function togglePin(id) {
-      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      notes = notes.map(note => {
-        if (note.id === id) {
-          return { ...note, pinned: !note.pinned };
-        }
-        return note;
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      fetchNotes();
-    }
-
-    function deleteNote(id) {
-      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      notes = notes.filter(note => note.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-      fetchNotes();
-    }
-
+    // 音声入力処理
     let recognition = null;
 
     function startSpeech() {
@@ -572,9 +580,10 @@
       if (e.key === 'Enter') addNote();
     });
     
-    document.getElementById('searchInput').addEventListener('input', fetchNotes);
+    document.getElementById('searchInput').addEventListener('input', renderNotes);
 
-    fetchNotes();
+    // アプリ起動
+    init();
   </script>
 </body>
 </html>
