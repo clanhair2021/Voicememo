@@ -3,88 +3,296 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族の音声メモ（単体版）</title>
-    <link rel="manifest" href="manifest.json">
-
+  <title>家族の音声メモ（自動分類版）</title>
+  <link rel="manifest" href="manifest.json">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 500px; margin: 20px auto; padding: 0 15px; background: #f4f6f8; }
-    h1 { text-align: center; color: #333; font-size: 22px; }
-    .input-box { display: flex; gap: 8px; margin-bottom: 20px; }
-    input[type="text"] { flex: 1; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; outline: none; }
-    button { padding: 12px 16px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-    .btn-send { background: #007bff; color: white; }
-    .btn-mic { background: #ff4757; color: white; }
-    .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
-    .card-text { font-size: 16px; color: #333; word-break: break-all; }
-    .btn-del { background: #fee2e2; color: #dc2626; font-size: 12px; padding: 6px 10px; border-radius: 6px; }
-    #status { text-align: center; color: #666; margin-top: 20px; font-size: 14px; }
+    /* 全体のレイアウト設定 */
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+      max-width: 500px; 
+      margin: 0 auto; 
+      padding: 15px 15px 90px 15px; 
+      background-color: #f7f4ef; 
+      color: #4a4238; 
+    }
+    h1 { 
+      text-align: center; 
+      color: #5c4e3e; 
+      font-size: 20px; 
+      margin-bottom: 12px;
+    }
+
+    /* 検索バー */
+    .search-box {
+      margin-bottom: 16px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 14px;
+      border: 1px solid #dcd4c7;
+      border-radius: 10px;
+      outline: none;
+      background-color: #ffffff;
+      color: #4a4238;
+      box-sizing: border-box;
+    }
+    
+    /* 入力エリアを画面下に固定 */
+    .input-container {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background-color: #f7f4ef;
+      padding: 12px 15px;
+      box-sizing: border-box;
+      box-shadow: 0 -4px 10px rgba(92, 78, 62, 0.08);
+      display: flex;
+      justify-content: center;
+    }
+    .input-box { 
+      display: flex; 
+      gap: 8px; 
+      width: 100%;
+      max-width: 470px;
+    }
+    input[type="text"] { 
+      flex: 1; 
+      padding: 12px 14px; 
+      font-size: 16px; 
+      border: 1px solid #dcd4c7; 
+      border-radius: 10px; 
+      outline: none; 
+      background-color: #ffffff;
+      color: #4a4238;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.03);
+      transition: border-color 0.2s;
+    }
+    input[type="text"].listening {
+      border-color: #e07a5f;
+      background-color: #fffaf8;
+    }
+    input[type="text"]::placeholder, .search-input::placeholder {
+      color: #a39889;
+    }
+    button { 
+      padding: 12px 16px; 
+      font-size: 16px; 
+      border: none; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      font-weight: bold; 
+      transition: all 0.2s;
+    }
+    button:active {
+      opacity: 0.8;
+    }
+    .btn-send { 
+      background: #8c7355; 
+      color: white; 
+    }
+    .btn-mic { 
+      background: #e07a5f; 
+      color: white; 
+    }
+    .btn-mic.active {
+      background: #d14928;
+      box-shadow: 0 0 8px rgba(224, 122, 95, 0.6);
+    }
+    
+    /* メモカードのスタイル */
+    .card { 
+      background: #ffffff; 
+      padding: 14px 16px; 
+      border-radius: 12px; 
+      margin-bottom: 10px; 
+      box-shadow: 0 2px 8px rgba(92, 78, 62, 0.06); 
+      border: 1px solid #efe9df;
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      gap: 10px;
+    }
+    .card.pinned {
+      background: #fffdf5;
+      border: 1.5px solid #e8c872;
+      box-shadow: 0 3px 10px rgba(232, 200, 114, 0.2);
+    }
+    .card-text { 
+      font-size: 16px; 
+      color: #4a4238; 
+      word-break: break-all; 
+      line-height: 1.4;
+      flex: 1;
+    }
+    .card-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .btn-pin {
+      background: #f0eae1;
+      color: #8c7355;
+      font-size: 14px;
+      padding: 6px 10px;
+      border-radius: 8px;
+    }
+    .btn-pin.active {
+      background: #fce8b2;
+      color: #8a6400;
+    }
+    .btn-del { 
+      background: #f5e6e1; 
+      color: #c05638; 
+      font-size: 12px; 
+      padding: 6px 10px; 
+      border-radius: 8px; 
+    }
+    .section-title {
+      font-size: 14px;
+      color: #6e5e49;
+      margin: 20px 0 8px 4px;
+      font-weight: bold;
+      border-bottom: 1px solid #dcd4c7;
+      padding-bottom: 4px;
+    }
+    #status { 
+      text-align: center; 
+      color: #8c8070; 
+      margin-top: 24px; 
+      font-size: 14px; 
+    }
   </style>
 </head>
 <body>
 
-  <h1>🎤 家族の音声メモ（単体版）</h1>
+  <h1>🎤 家族の音声メモ</h1>
 
-  <div class="input-box">
-    <input type="text" id="noteInput" placeholder="メモを入力、または🎤で音声入力">
-    <button class="btn-mic" id="micBtn">🎤</button>
-    <button class="btn-send" id="sendBtn">送信</button>
+  <!-- 検索バー -->
+  <div class="search-box">
+    <input type="text" id="searchInput" class="search-input" placeholder="🔍 メモを検索...">
   </div>
 
   <div id="notesList"></div>
   <div id="status">読み込み中...</div>
 
+  <!-- 画面下に固定する入力バー -->
+  <div class="input-container">
+    <div class="input-box">
+      <input type="text" id="noteInput" placeholder="例: 病院 明日の10時">
+      <button class="btn-mic" id="micBtn">🎤</button>
+      <button class="btn-send" id="sendBtn">送信</button>
+    </div>
+  </div>
+
   <script>
-    // ブラウザの内部ストレージ（localStorage）を使うため通信エラーが起きません
     const STORAGE_KEY = 'family_notes_local';
 
-    // メモ一覧の取得と表示
+    // メモ一覧の取得と表示（カテゴリ別グループ化）
     function fetchNotes() {
       const statusEl = document.getElementById('status');
       const listEl = document.getElementById('notesList');
+      const searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
       listEl.innerHTML = '';
 
-      const notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+      if (searchQuery) {
+        notes = notes.filter(note => note.content.toLowerCase().includes(searchQuery));
+      }
 
       if (notes.length === 0) {
-        statusEl.innerText = 'まだメモはありません';
+        statusEl.innerText = searchQuery ? '該当するメモが見つかりません' : 'まだメモはありません';
         return;
       }
       statusEl.innerText = '';
 
-      notes.forEach((note) => {
-        const div = document.createElement('div');
-        div.className = 'card';
-        div.innerHTML = `
-          <span class="card-text">${escapeHtml(note.content)}</span>
-          <button class="btn-del" onclick="deleteNote(${note.id})">削除</button>
-        `;
-        listEl.appendChild(div);
+      // 1. ピン留め（ピックアップ）されたものは最優先で上に表示
+      const pinnedNotes = notes.filter(n => n.pinned);
+      if (pinnedNotes.length > 0) {
+        appendSection(listEl, '📌 ピックアップ', pinnedNotes);
+      }
+
+      // 2. カテゴリごとに分類して表示
+      const categories = ['📅 予約', '🛒 買い物', '📅 予定', '📋 タスク', '📝 その他'];
+      
+      categories.forEach(category => {
+        const catNotes = notes.filter(n => !n.pinned && (n.category || '📝 その他') === category);
+        if (catNotes.length > 0) {
+          appendSection(listEl, category, catNotes);
+        }
       });
     }
 
-    // メモの追加
+    function appendSection(container, titleText, notesArray) {
+      const title = document.createElement('div');
+      title.className = 'section-title';
+      title.innerText = titleText;
+      container.appendChild(title);
+
+      notesArray.forEach(note => {
+        const div = document.createElement('div');
+        div.className = `card ${note.pinned ? 'pinned' : ''}`;
+        div.innerHTML = `
+          <span class="card-text">${escapeHtml(note.content)}</span>
+          <div class="card-actions">
+            <button class="btn-pin ${note.pinned ? 'active' : ''}" onclick="togglePin(${note.id})">📌</button>
+            <button class="btn-del" onclick="deleteNote(${note.id})">削除</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    // メモの追加（テキストからカテゴリを自動判定）
     function addNote() {
       const input = document.getElementById('noteInput');
       const text = input.value.trim();
       if (!text) return;
 
+      // キーワードによる自動カテゴリ判定
+      let category = '📝 その他';
+      if (text.includes('予約') || text.includes('事前予約') || text.includes('お店') || text.includes('店')) {
+        category = '📅 予約';
+      } else if (text.includes('買い物') || text.includes('買いたい') || text.includes('買って')) {
+        category = '🛒 買い物';
+      } else if (text.includes('予定') || text.includes('明日') || text.includes('来週') || text.includes('日') || text.includes('病院') || text.includes('子供')) {
+        category = '📅 予定';
+      } else if (text.includes('タスク') || text.includes('やること') || text.includes('掃除')) {
+        category = '📋 タスク';
+      }
+
       const notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
       const newNote = {
-        id: Date.now(), // ユニークなID
+        id: Date.now(),
         content: text,
+        category: category,
+        pinned: false,
         created_at: new Date().toLocaleString()
       };
 
-      notes.unshift(notes.unshift ? newNote : [newNote]); // 新しいものを先頭に追加
-      // シンプルに配列の先頭に追加
       const updatedNotes = [newNote, ...notes];
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedNotes));
       input.value = '';
       fetchNotes();
+      
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // メモの削除
+    function togglePin(id) {
+      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      notes = notes.map(note => {
+        if (note.id === id) {
+          return { ...note, pinned: !note.pinned };
+        }
+        return note;
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+      fetchNotes();
+    }
+
     function deleteNote(id) {
       let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
       notes = notes.filter(note => note.id !== id);
@@ -92,18 +300,70 @@
       fetchNotes();
     }
 
-    // 音声入力機能
+    // リアルタイム音声入力
+    let recognition = null;
+
     function startSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
         alert('お使いのブラウザは音声入力に対応していません');
         return;
       }
-      const recognition = new SpeechRecognition();
+
+      const inputEl = document.getElementById('noteInput');
+      const micBtn = document.getElementById('micBtn');
+
+      if (recognition) {
+        recognition.stop();
+        return;
+      }
+
+      recognition = new SpeechRecognition();
       recognition.lang = 'ja-JP';
-      recognition.onresult = (e) => {
-        document.getElementById('noteInput').value = e.results[0][0].transcript;
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      let baseText = inputEl.value;
+
+      recognition.onstart = () => {
+        micBtn.classList.add('active');
+        inputEl.classList.add('listening');
+        inputEl.placeholder = '🎤 話してください...';
       };
+
+      recognition.onresult = (e) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const transcript = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        const currentText = finalTranscript || interimTranscript;
+        inputEl.value = baseText ? baseText + ' ' + currentText : currentText;
+      };
+
+      recognition.onerror = (e) => {
+        console.error('音声認識エラー:', e.error);
+        stopMicUI();
+      };
+
+      recognition.onend = () => {
+        stopMicUI();
+      };
+
+      function stopMicUI() {
+        micBtn.classList.remove('active');
+        inputEl.classList.remove('listening');
+        inputEl.placeholder = '例: 病院 明日の10時';
+        recognition = null;
+      }
+
       recognition.start();
     }
 
@@ -111,14 +371,16 @@
       return str ? str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
     }
 
-    // イベントリスナーの設定
+    // イベントリスナー
     document.getElementById('sendBtn').addEventListener('click', addNote);
     document.getElementById('micBtn').addEventListener('click', startSpeech);
     document.getElementById('noteInput').addEventListener('keypress', (e) => {
       if (e.key === 'Enter') addNote();
     });
+    
+    document.getElementById('searchInput').addEventListener('input', fetchNotes);
 
-    // 初期読み込み
+    // 初期化
     fetchNotes();
   </script>
 </body>
