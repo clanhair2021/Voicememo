@@ -22,6 +22,38 @@
       margin-bottom: 12px;
     }
 
+    /* カテゴリ切り替えタブ */
+    .tabs-container {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tabs-container::-webkit-scrollbar {
+      display: none;
+    }
+    .tab-btn {
+      white-space: nowrap;
+      padding: 6px 12px;
+      font-size: 13px;
+      border-radius: 20px;
+      border: 1px solid #dcd4c7;
+      background-color: #ffffff;
+      color: #6e5e49;
+      cursor: pointer;
+      font-weight: normal;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .tab-btn.active {
+      background-color: #8c7355;
+      color: #ffffff;
+      border-color: #8c7355;
+      font-weight: bold;
+    }
+
     /* 検索バー */
     .search-box {
       margin-bottom: 16px;
@@ -169,6 +201,16 @@
 
   <h1>🎤 家族の音声メモ</h1>
 
+  <!-- カテゴリ切り替えタブ -->
+  <div class="tabs-container">
+    <button class="tab-btn active" onclick="selectTab('all')">すべて</button>
+    <button class="tab-btn" onclick="selectTab('📅 予約')">📅 予約</button>
+    <button class="tab-btn" onclick="selectTab('🛒 買い物')">🛒 買い物</button>
+    <button class="tab-btn" onclick="selectTab('📅 予定')">📅 予定</button>
+    <button class="tab-btn" onclick="selectTab('📋 タスク')">📋 タスク</button>
+    <button class="tab-btn" onclick="selectTab('📝 その他')">📝 その他</button>
+  </div>
+
   <!-- 検索バー -->
   <div class="search-box">
     <input type="text" id="searchInput" class="search-input" placeholder="🔍 メモを検索...">
@@ -188,8 +230,25 @@
 
   <script>
     const STORAGE_KEY = 'family_notes_local';
+    let currentTab = 'all';
 
-    // メモ一覧の取得と表示（カテゴリ別グループ化）
+    function selectTab(category) {
+      currentTab = category;
+      
+      // タブボタンのアクティブ状態を切り替え
+      const buttons = document.querySelectorAll('.tab-btn');
+      buttons.forEach(btn => {
+        if ((category === 'all' && btn.innerText === 'すべて') || btn.innerText === category) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      fetchNotes();
+    }
+
+    // メモ一覧の取得と表示
     function fetchNotes() {
       const statusEl = document.getElementById('status');
       const listEl = document.getElementById('notesList');
@@ -198,31 +257,45 @@
 
       let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 
+      // 検索フィルター
       if (searchQuery) {
         notes = notes.filter(note => note.content.toLowerCase().includes(searchQuery));
       }
 
+      // タブフィルター
+      if (currentTab !== 'all') {
+        notes = notes.filter(note => (note.category || '📝 その他') === currentTab);
+      }
+
       if (notes.length === 0) {
-        statusEl.innerText = searchQuery ? '該当するメモが見つかりません' : 'まだメモはありません';
+        statusEl.innerText = searchQuery ? '該当するメモが見つかりません' : 'メモはありません';
         return;
       }
       statusEl.innerText = '';
 
-      // 1. ピン留め（ピックアップ）されたものは最優先で上に表示
+      // 1. ピン留めされたものは上に表示（「すべて」タブまたは個別のカテゴリタブ内）
       const pinnedNotes = notes.filter(n => n.pinned);
       if (pinnedNotes.length > 0) {
         appendSection(listEl, '📌 ピックアップ', pinnedNotes);
       }
 
-      // 2. カテゴリごとに分類して表示
-      const categories = ['📅 予約', '🛒 買い物', '📅 予定', '📋 タスク', '📝 その他'];
-      
-      categories.forEach(category => {
-        const catNotes = notes.filter(n => !n.pinned && (n.category || '📝 その他') === category);
-        if (catNotes.length > 0) {
-          appendSection(listEl, category, catNotes);
+      // 2. 表示処理
+      if (currentTab === 'all') {
+        // 「すべて」タブの場合は各カテゴリに見出しをつけてグループ化
+        const categories = ['📅 予約', '🛒 買い物', '📅 予定', '📋 タスク', '📝 その他'];
+        categories.forEach(category => {
+          const catNotes = notes.filter(n => !n.pinned && (n.category || '📝 その他') === category);
+          if (catNotes.length > 0) {
+            appendSection(listEl, category, catNotes);
+          }
+        });
+      } else {
+        // 個別カテゴリタブの場合はそのカテゴリのピン留め以外のメモを表示
+        const unpinnedNotes = notes.filter(n => !n.pinned);
+        if (unpinnedNotes.length > 0) {
+          appendSection(listEl, currentTab, unpinnedNotes);
         }
-      });
+      }
     }
 
     function appendSection(container, titleText, notesArray) {
@@ -276,7 +349,9 @@
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedNotes));
       input.value = '';
-      fetchNotes();
+      
+      // 追加したメモのカテゴリタブに自動で合わせる
+      selectTab(category);
       
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
