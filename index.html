@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族の音声メモ</title>
-  <!-- Supabaseのライブラリ読み込み -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>家族の音声メモ（単体版）</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 500px; margin: 20px auto; padding: 0 15px; background: #f4f6f8; }
     h1 { text-align: center; color: #333; font-size: 22px; }
@@ -22,75 +20,77 @@
 </head>
 <body>
 
-  <h1>🎤 家族の音声メモ</h1>
+  <h1>🎤 家族の音声メモ（単体版）</h1>
 
   <div class="input-box">
     <input type="text" id="noteInput" placeholder="メモを入力、または🎤で音声入力">
-    <button class="btn-mic" onclick="startSpeech()">🎤</button>
-    <button class="btn-send" onclick="addNote()">送信</button>
+    <button class="btn-mic" id="micBtn">🎤</button>
+    <button class="btn-send" id="sendBtn">送信</button>
   </div>
 
   <div id="notesList"></div>
   <div id="status">読み込み中...</div>
 
   <script>
-    // --- Supabaseの接続情報 ---
-    const SUPABASE_URL = 'https://yvalpvnajcxxewfmbxq.supabase.co';
-    const SUPABASE_KEY = 'EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2YWxwdm5hanhjeHhld2ZtYnhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwOTg5NjMsImV4cCI6MjEwMDY3NDk2M30.6Zcq9YtoGqdsR52KkDWRNjvqiFqEfXETRG2mRuAikks';
-    
-    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // ブラウザの内部ストレージ（localStorage）を使うため通信エラーが起きません
+    const STORAGE_KEY = 'family_notes_local';
 
-    // --- 1. メモ一覧の取得 ---
-    async function fetchNotes() {
+    // メモ一覧の取得と表示
+    function fetchNotes() {
       const statusEl = document.getElementById('status');
-      try {
-        const { data, error } = await db.from('notes').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
+      const listEl = document.getElementById('notesList');
+      listEl.innerHTML = '';
 
-        const listEl = document.getElementById('notesList');
-        listEl.innerHTML = '';
-        statusEl.innerText = data.length === 0 ? 'まだメモはありません' : '';
+      const notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 
-        data.forEach(note => {
-          const div = document.createElement('div');
-          div.className = 'card';
-          div.innerHTML = `
-            <span class="card-text">${escapeHtml(note.content)}</span>
-            <button class="btn-del" onclick="deleteNote(${note.id})">削除</button>
-          `;
-          listEl.appendChild(div);
-        });
-      } catch (err) {
-        statusEl.innerText = '⚠️ 接続エラー: ' + err.message;
+      if (notes.length === 0) {
+        statusEl.innerText = 'まだメモはありません';
+        return;
       }
+      statusEl.innerText = '';
+
+      notes.forEach((note) => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <span class="card-text">${escapeHtml(note.content)}</span>
+          <button class="btn-del" onclick="deleteNote(${note.id})">削除</button>
+        `;
+        listEl.appendChild(div);
+      });
     }
 
-    // --- 2. メモの追加 ---
-    async function addNote() {
+    // メモの追加
+    function addNote() {
       const input = document.getElementById('noteInput');
       const text = input.value.trim();
       if (!text) return;
 
-      const { error } = await db.from('notes').insert([{ content: text, user_name: '家族' }]);
-      if (error) {
-        alert('保存に失敗しました: ' + error.message);
-      } else {
-        input.value = '';
-        fetchNotes();
-      }
+      const notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      const newNote = {
+        id: Date.now(), // ユニークなID
+        content: text,
+        created_at: new Date().toLocaleString()
+      };
+
+      notes.unshift(notes.unshift ? newNote : [newNote]); // 新しいものを先頭に追加
+      // シンプルに配列の先頭に追加
+      const updatedNotes = [newNote, ...notes];
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedNotes));
+      input.value = '';
+      fetchNotes();
     }
 
-    // --- 3. メモの削除 ---
-    async function deleteNote(id) {
-      const { error } = await db.from('notes').delete().eq('id', id);
-      if (error) {
-        alert('削除に失敗しました: ' + error.message);
-      } else {
-        fetchNotes();
-      }
+    // メモの削除
+    function deleteNote(id) {
+      let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      notes = notes.filter(note => note.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+      fetchNotes();
     }
 
-    // --- 4. 音声入力機能 ---
+    // 音声入力機能
     function startSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
@@ -109,8 +109,16 @@
       return str ? str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
     }
 
-    // 起動時にメモを読み込む
+    // イベントリスナーの設定
+    document.getElementById('sendBtn').addEventListener('click', addNote);
+    document.getElementById('micBtn').addEventListener('click', startSpeech);
+    document.getElementById('noteInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') addNote();
+    });
+
+    // 初期読み込み
     fetchNotes();
   </script>
 </body>
 </html>
+
