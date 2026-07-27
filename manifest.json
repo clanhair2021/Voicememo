@@ -1,0 +1,16 @@
+{
+  "name": "家族の音声メモ",
+  "short_name": "音声メモ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#007bff",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/709/709682.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+
